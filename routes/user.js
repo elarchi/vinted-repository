@@ -11,11 +11,6 @@ const encBase64 = require("crypto-js/enc-base64");
 // Import du package cloudinary
 const cloudinary = require("cloudinary").v2;
 
-// Package qui permet de générer des données aléatoires (ne pas en tenir compte, cela sert à réinitiliser la BDD entre 2 sessions de formation)
-const faker = require("faker");
-faker.locale = "fr";
-const owners = require("../data/owners.json");
-
 // Import du model User et Offer
 // afin d'éviter des erreurs (notamment dues à d'eventuelles références entre les collections)
 // nous vous conseillons d'importer touts vos models dans toutes vos routes
@@ -110,108 +105,5 @@ router.post("/user/login", async (req, res) => {
   }
 });
 
-// CETTE ROUTE SERT AU RESET DE LA BDD ENTRE 2 SESSIONS DE FORMATION. CELA NE FAIT PAS PARTIE DE L'EXERCICE.
-router.get("/reset-users", async (req, res) => {
-  if (req.headers.authorization) {
-    const token = req.headers.authorization.replace("Bearer ", "");
-
-    if (token !== process.env.ADMIN_TOKEN) {
-      res.status(401).json({ error: "Unauthorized" });
-    } else {
-      // Vider la collection User
-      await User.deleteMany({});
-
-      // Pour cela, il faut supprimer les images, cloudinary ne permettant pas de supprimer des dossiers qui ne sont pas vides
-      try {
-        const deleteResources = await cloudinary.api.delete_resources_by_prefix(
-          "api/vinted/users"
-        );
-        console.log("deleteResources ===>  ", deleteResources);
-      } catch (error) {
-        console.log("deleteResources ===>  ", error.message);
-      }
-
-      // Créer les users
-
-      // Admin User
-      try {
-        const token = uid2(64);
-        const salt = uid2(64);
-        const hash = SHA256("azerty" + salt).toString(encBase64);
-
-        const adminUser = new User({
-          email: "brice@lereacteur.io",
-          token: token,
-          hash: hash,
-          salt: salt,
-          account: {
-            username: "Brice",
-            phone: "0607080910",
-          },
-        });
-
-        // uploader la photo de profile de l'admin user
-        const resultImage = await cloudinary.uploader.upload(
-          faker.random.image(),
-          {
-            folder: `api/vinted/users/${adminUser._id}`,
-            public_id: "avatar",
-          }
-        );
-
-        adminUser.account.avatar = resultImage;
-        // sauvegarder l'admin user dans la BDD
-        await adminUser.save();
-      } catch (error) {
-        res
-          .status(404)
-          .json({ error: "Error when creating admin user : " + error.message });
-      }
-
-      // Random Users
-      for (let i = 0; i < 20; i++) {
-        try {
-          // Étape 1 : encrypter le mot de passe
-          // Générer le token et encrypter le mot de passe
-          const token = uid2(64);
-          const salt = uid2(64);
-          const hash = SHA256("azerty" + salt).toString(encBase64);
-
-          // Étape 2 : créer le nouvel utilisateur
-          const newUser = new User({
-            email: faker.internet.email().toLowerCase(),
-            token: token,
-            hash: hash,
-            salt: salt,
-            account: {
-              username: faker.internet.userName(),
-              phone: faker.phone.phoneNumber("06########"),
-            },
-          });
-
-          // Étape 3 : uploader la photo de profile du user
-          const resultImage = await cloudinary.uploader.upload(
-            faker.random.image(),
-            {
-              folder: `api/vinted/users/${newUser._id}`,
-              public_id: "avatar",
-            }
-          );
-
-          newUser.account.avatar = resultImage;
-          // Étape 3 : sauvegarder ce nouvel utilisateur dans la BDD
-          await newUser.save();
-          console.log(`${i + 1} / ${owners.length} users saved`);
-        } catch (error) {
-          console.log(error.message);
-          res.status(400).json({ message: error.message });
-        }
-      }
-      res.status(200).json("🍺 All users saved !");
-    }
-  } else {
-    res.status(400).json({ error: "Unauthorized" });
-  }
-});
 
 module.exports = router;
